@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vetsched Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vetsched-admin.css">
+</head>
+<body>
+
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-circle">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 14.2c-2.6 0-5.4 2-5.4 4.6 0 1.4 1.1 2.4 2.5 2.4.9 0 1.6-.4 2.3-.8.4-.3.9-.5 1.4-.5s1 .2 1.4.5c.7.4 1.4.8 2.3.8 1.4 0 2.5-1 2.5-2.4 0-2.6-2.8-4.6-5.4-4.6z" fill="#3f5638"/><ellipse cx="6" cy="10.5" rx="1.6" ry="2.1" fill="#3f5638"/><ellipse cx="18" cy="10.5" rx="1.6" ry="2.1" fill="#3f5638"/><ellipse cx="9" cy="6.8" rx="1.4" ry="1.9" fill="#3f5638"/><ellipse cx="15" cy="6.8" rx="1.4" ry="1.9" fill="#3f5638"/></svg>
+      </div>
+      <span class="brand-text">Vetsched</span>
+    </div>
+    <p class="login-sub">Sign in to the admin console</p>
+    <div class="login-error" id="loginError">That username or password isn't right.</div>
+    <div class="field">
+      <label for="loginUser">Username</label>
+      <input type="text" id="loginUser" placeholder="Username" autocomplete="username">
+    </div>
+    <div class="field">
+      <label for="loginPass">Password</label>
+      <input type="password" id="loginPass" placeholder="........" autocomplete="current-password">
+    </div>
+    <label class="remember-row" for="rememberMe">
+      <input type="checkbox" id="rememberMe">
+      <span>Remember me</span>
+    </label>
+    <button class="login-submit" id="loginSubmit">Sign in</button>
+  </div>
+</div>
+
+<div class="app" id="appRoot">
+  <aside class="sidebar">
+    <div class="brand-row">
+      <div class="brand">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 14.2c-2.6 0-5.4 2-5.4 4.6 0 1.4 1.1 2.4 2.5 2.4.9 0 1.6-.4 2.3-.8.4-.3.9-.5 1.4-.5s1 .2 1.4.5c.7.4 1.4.8 2.3.8 1.4 0 2.5-1 2.5-2.4 0-2.6-2.8-4.6-5.4-4.6z" fill="#d7ddd0"/><ellipse cx="6" cy="10.5" rx="1.6" ry="2.1" fill="#d7ddd0"/><ellipse cx="18" cy="10.5" rx="1.6" ry="2.1" fill="#d7ddd0"/><ellipse cx="9" cy="6.8" rx="1.4" ry="1.9" fill="#d7ddd0"/><ellipse cx="15" cy="6.8" rx="1.4" ry="1.9" fill="#d7ddd0"/></svg>
+        <span class="brand-text">Vetsched</span>
+      </div>
+      <button class="hamburger-btn" id="hamburgerBtn" title="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg>
+      </button>
+      <div class="nav-menu" id="navMenu">
+        <button class="nav-menu-item" id="navSubjects" data-view="subjects">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
+          Subjects
+        </button>
+        <button class="nav-menu-item" id="navStudents" data-view="students">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+          Students
+        </button>
+        <button class="nav-menu-item" id="navSettings" data-view="settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-2.6V20a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H6v-2.6h.2a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V5h2.6v.2a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v2.6h-.2a1.7 1.7 0 0 0-1.6 1Z"/></svg>
+          Settings
+        </button>
+        <button class="nav-menu-item nav-logout-item" id="menuLogoutBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 19V5a2 2 0 0 0-2-2h-6"/></svg>
+          Log out
+        </button>
+      </div>
+    </div>
+
+    <div id="sidebarBody"></div>
+
+    <div class="sidebar-footer">
+      <span id="loggedInAs">Admin console</span>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="main-inner" id="mainInner"></div>
+  </main>
+</div>
+
+<!-- Subject modal -->
+<div class="overlay" id="subjectOverlay">
+  <div class="modal">
+    <h3 id="subjectModalTitle">Add subject</h3>
+    <div class="field">
+      <label for="subjectCode">Subject code</label>
+      <input type="text" id="subjectCode" placeholder="e.g. 101" maxlength="10">
+      <div class="field-error" id="subjectCodeError">Give the subject a code.</div>
+    </div>
+    <div class="field">
+      <label for="subjectName">Subject name</label>
+      <input type="text" id="subjectName" placeholder="e.g. Small Animal Anatomy">
+      <div class="field-error" id="subjectNameError">Give the subject a name.</div>
+    </div>
+    <div class="field">
+      <label for="subjectYear">Year level</label>
+      <select id="subjectYear">
+        <option value="1">Year 1</option>
+        <option value="2">Year 2</option>
+        <option value="3">Year 3</option>
+        <option value="4">Year 4</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancelSubject">Cancel</button>
+      <button class="btn-primary" id="saveSubject">Save subject</button>
+    </div>
+  </div>
+</div>
+
+<!-- Section modal -->
+<div class="overlay" id="sectionOverlay">
+  <div class="modal">
+    <h3 id="sectionModalTitle">Add section</h3>
+    <div class="field">
+      <label for="sectionType">Section name</label>
+      <input type="text" id="sectionType" placeholder="e.g. Section A">
+      <div class="field-error" id="sectionTypeError">Give the section a name.</div>
+    </div>
+    <div class="field">
+      <label for="maxCapacity">Maximum capacity</label>
+      <input type="number" id="maxCapacity" min="1" step="1" placeholder="e.g. 40">
+      <div class="field-error" id="maxCapacityError">Enter a capacity greater than 0.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancelSection">Cancel</button>
+      <button class="btn-primary" id="saveSection">Save section</button>
+    </div>
+  </div>
+</div>
+
+<!-- Class modal -->
+<div class="overlay" id="classOverlay">
+  <div class="modal">
+    <h3 id="classModalTitle">Add class</h3>
+    <div class="field">
+      <label for="classTypeInput">Class type</label>
+      <select id="classTypeInput">
+        <option value="Lecture">Lecture</option>
+        <option value="Lab">Lab</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Day</label>
+      <div class="day-picker" id="classDayPicker">
+        <button type="button" class="class-day-toggle" data-day="Mon">Mon</button>
+        <button type="button" class="class-day-toggle" data-day="Tue">Tue</button>
+        <button type="button" class="class-day-toggle" data-day="Wed">Wed</button>
+        <button type="button" class="class-day-toggle" data-day="Thu">Thu</button>
+        <button type="button" class="class-day-toggle" data-day="Fri">Fri</button>
+        <button type="button" class="class-day-toggle" data-day="Sat">Sat</button>
+        <button type="button" class="class-day-toggle" data-day="Sun">Sun</button>
+      </div>
+      <div class="field-error" id="classDayError">Pick one day only.</div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label for="classStartTime">Start time</label><input type="time" id="classStartTime"></div>
+      <div class="field"><label for="classEndTime">End time</label><input type="time" id="classEndTime"></div>
+    </div>
+    <div class="field-error" id="classTimeError">End time must be after start time.</div>
+    <div class="field"><label for="classInstructor">Instructor name</label><input type="text" id="classInstructor" placeholder="e.g. Dr. Alicia Reyes"></div>
+    <div class="field-error" id="classInstructorError">Add an instructor.</div>
+    <div class="field"><label for="classRoom">Room / location (optional)</label><input type="text" id="classRoom" placeholder="e.g. Surgery Hall 2"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancelClass">Cancel</button>
+      <button class="btn-primary" id="saveClass">Save class</button>
+    </div>
+  </div>
+</div>
+
+<!-- Student modal -->
+<div class="overlay" id="studentOverlay">
+  <div class="modal">
+    <h3 id="studentModalTitle">Add student</h3>
+    <div class="field">
+      <label for="studentId">Student ID</label>
+      <input type="text" id="studentId" placeholder="e.g. 457">
+      <div class="field-error" id="studentIdError">Give the student an ID.</div>
+    </div>
+    <div class="field">
+      <label for="studentName">Student name</label>
+      <input type="text" id="studentName" placeholder="e.g. Jamie Cruz">
+      <div class="field-error" id="studentNameError">Give the student a name.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancelStudent">Cancel</button>
+      <button class="btn-primary" id="saveStudent">Save student</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="vetsched-admin.js"></script>
+</body>
+</html>
