@@ -1,7 +1,9 @@
 <?php
 function sendEmailJsResetCode($recipient, $code) {
-    $configPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . "private" .
-        DIRECTORY_SEPARATOR . "vetsched_emailjs_config.php";
+    $configPath = __DIR__ . DIRECTORY_SEPARATOR . "vetsched_emailjs_config.php";
+    if (!is_file($configPath)) {
+        $configPath = __DIR__ . DIRECTORY_SEPARATOR . "emailjs_config.php";
+    }
     if (!is_file($configPath)) {
         error_log("EmailJS is not configured. Expected config at " . $configPath);
         return false;
