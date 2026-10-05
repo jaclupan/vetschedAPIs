@@ -113,6 +113,12 @@ button{font-family:inherit;}
 .settings-page{max-width:860px;padding-top:12px;}
 .settings-header h1{margin:0 0 8px;font-size:2rem;}
 .settings-header p{margin:0;color:var(--charcoal-soft);font-size:.92rem;}
+.settings-card{margin-top:24px;padding:24px;border:1px solid #dfe7d5;border-radius:12px;background:var(--paper);box-shadow:0 1px 3px rgba(32,48,36,.04);}
+.settings-card h2{margin:0 0 8px;font-size:1.15rem;color:var(--forest-dark);}
+.settings-card p{margin:0;color:var(--charcoal-soft);font-size:.88rem;line-height:1.5;}
+.settings-password-form{margin-top:18px;display:grid;gap:14px;}
+.settings-form-actions{display:flex;justify-content:flex-start;}
+.settings-success{display:block;color:#1e6b45;font-size:.82rem;font-weight:600;min-height:1.2em;}
 .settings-danger{margin-top:32px;padding:24px;border:1px solid #e5b9aa;border-radius:12px;background:#fff8f4;display:flex;align-items:center;justify-content:space-between;gap:24px;}
 .settings-danger h2{margin:0 0 6px;font-size:1.15rem;color:var(--danger);}
 .settings-danger p{margin:0;color:var(--charcoal-soft);font-size:.88rem;line-height:1.5;max-width:580px;}
@@ -440,6 +446,16 @@ button{font-family:inherit;}
 .student-name{font-weight:600;color:var(--forest-dark);font-size:0.95rem;}
 .student-id{color:var(--charcoal-soft);font-size:0.82rem;}
 .student-actions{display:flex;gap:6px;flex-shrink:0;}
+.view-schedule-btn{border:1px solid var(--forest);border-radius:8px;background:var(--paper);color:var(--forest-dark);padding:8px 11px;font:600 .8rem Inter,sans-serif;cursor:pointer;}
+.view-schedule-btn:hover{background:#eef1ea;}
+.student-entry{border-bottom:1px solid var(--line);}
+.student-entry:last-child{border-bottom:none;}
+.student-entry .student-row{border-bottom:none;}
+.student-schedule{margin:0 18px 14px 70px;border:1px solid #d6dfd0;border-radius:9px;overflow:hidden;background:#fafbf8;}
+.student-schedule-title{padding:9px 12px;background:#eef1ea;color:var(--forest-dark);font-size:.8rem;font-weight:700;}
+.student-schedule-row{padding:10px 12px;border-top:1px solid #dfe7d5;color:var(--charcoal-soft);font-size:.8rem;line-height:1.55;}
+.student-schedule-row strong{color:var(--forest-dark);}
+.student-schedule-empty{margin:0 18px 14px 70px;padding:12px;border:1px dashed var(--line);border-radius:9px;color:var(--charcoal-soft);font-size:.84rem;}
 .no-results{
   text-align:center;
   padding:60px 20px;
@@ -650,6 +666,22 @@ button{font-family:inherit;}
   display:none;
 }
 .login-error.show{display:block;}
+.password-field-wrap{margin-bottom:10px;}
+.password-input-wrap{position:relative;}
+.password-input-wrap input{padding-right:60px !important;}
+.password-toggle-btn{
+  position:absolute;
+  right:10px;
+  top:50%;
+  transform:translateY(-50%);
+  border:none;
+  background:transparent;
+  color:var(--forest-dark);
+  font-size:0.74rem;
+  font-weight:700;
+  cursor:pointer;
+  padding:4px 6px;
+}
 .remember-row{
   display:flex;
   align-items:center;

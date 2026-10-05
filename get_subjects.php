@@ -31,8 +31,12 @@ function parsePgArray($value) {
 }
 
 $yearLevel = $_GET['year_level'] ?? $_POST['year_level'] ?? null;
+$semester = $_GET['semester'] ?? $_POST['semester'] ?? null;
 if ($yearLevel !== null && $yearLevel !== '') {
     $yearLevel = (int) $yearLevel;
+}
+if ($semester !== null && $semester !== '') {
+    $semester = (int) $semester;
 }
 
 try {
@@ -40,17 +44,26 @@ try {
         SELECT subject_id AS id,
                subject_code AS code,
                subject_name AS name,
-               year_level AS \"yearLevel\"
+               year_level AS \"yearLevel\",
+               semester
         FROM subject
     ";
 
     $params = [];
+    $filters = [];
     if ($yearLevel !== null) {
-        $subjectSql .= ' WHERE year_level = :year_level';
+        $filters[] = 'year_level = :year_level';
         $params[':year_level'] = $yearLevel;
     }
+    if ($semester !== null) {
+        $filters[] = 'semester = :semester';
+        $params[':semester'] = $semester;
+    }
+    if ($filters) {
+        $subjectSql .= ' WHERE ' . implode(' AND ', $filters);
+    }
 
-    $subjectSql .= ' ORDER BY subject_id';
+    $subjectSql .= ' ORDER BY year_level, semester, subject_id';
 
     $subjectStmt = $conn->prepare($subjectSql);
     $subjectStmt->execute($params);

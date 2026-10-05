@@ -45,6 +45,7 @@ try {
                            o.class_type AS type,
                            o.offering_id
                     FROM plotting p
+                    JOIN schedule_submission ss ON TRIM(ss.student_id) = TRIM(p.student_id) AND ss.is_submitted = TRUE
                     JOIN offering o ON o.offering_id = p.offering_id
                     JOIN subject sub ON sub.subject_id = o.subject_id
                     LEFT JOIN schedule sc ON sc.schedule_id = o.schedule_id

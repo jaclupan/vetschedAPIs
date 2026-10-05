@@ -24,9 +24,12 @@
       <label for="loginUser">Username</label>
       <input type="text" id="loginUser" placeholder="Username" autocomplete="username">
     </div>
-    <div class="field">
+    <div class="field password-field-wrap">
       <label for="loginPass">Password</label>
-      <input type="password" id="loginPass" placeholder="........" autocomplete="current-password">
+      <div class="password-input-wrap">
+        <input type="password" id="loginPass" placeholder="........" autocomplete="current-password">
+        <button type="button" class="password-toggle-btn" id="loginPasswordToggle" aria-label="Show password">Show</button>
+      </div>
     </div>
     <label class="remember-row" for="rememberMe">
       <input type="checkbox" id="rememberMe">
@@ -99,6 +102,14 @@
         <option value="2">Year 2</option>
         <option value="3">Year 3</option>
         <option value="4">Year 4</option>
+        <option value="5">Year 5</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="subjectSemester">Semester</label>
+      <select id="subjectSemester">
+        <option value="1">Semester 1</option>
+        <option value="2">Semester 2</option>
       </select>
     </div>
     <div class="modal-actions">
@@ -158,8 +169,11 @@
       <div class="field"><label for="classEndTime">End time</label><input type="time" id="classEndTime"></div>
     </div>
     <div class="field-error" id="classTimeError">End time must be after start time.</div>
-    <div class="field"><label for="classInstructor">Instructor name</label><input type="text" id="classInstructor" placeholder="e.g. Dr. Alicia Reyes"></div>
-    <div class="field-error" id="classInstructorError">Add an instructor.</div>
+    <div class="field">
+      <label for="classInstructor">Instructor</label>
+      <select id="classInstructor"></select>
+      <div class="field-error" id="classInstructorError">Select an instructor.</div>
+    </div>
     <div class="field"><label for="classRoom">Room / location (optional)</label><input type="text" id="classRoom" placeholder="e.g. Surgery Hall 2"></div>
     <div class="modal-actions">
       <button class="btn-secondary" id="cancelClass">Cancel</button>

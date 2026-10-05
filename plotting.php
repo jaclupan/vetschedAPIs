@@ -45,6 +45,7 @@ try {
                            o.class_type AS type,
                            o.offering_id
                     FROM plotting p
+                    JOIN schedule_submission ss ON TRIM(ss.student_id) = TRIM(p.student_id) AND ss.is_submitted = TRUE
                     JOIN offering o ON o.offering_id = p.offering_id
                     JOIN subject sub ON sub.subject_id = o.subject_id
                     LEFT JOIN schedule sc ON sc.schedule_id = o.schedule_id
@@ -97,6 +98,8 @@ try {
                 $deleteStmt->execute([':studentId' => $studentId, ':offeringId' => $offeringId]);
                 $insertStmt->execute([':studentId' => $studentId, ':offeringId' => $offeringId]);
             }
+            $submissionStmt = $conn->prepare('INSERT INTO schedule_submission (student_id, is_submitted, submitted_at) VALUES (:studentId, FALSE, NULL) ON CONFLICT (student_id) DO UPDATE SET is_submitted = FALSE, submitted_at = NULL');
+            $submissionStmt->execute([':studentId' => $studentId]);
 
             $conn->commit();
             respond(['success' => true]);
@@ -119,12 +122,32 @@ try {
             foreach ($offeringIds as $offeringId) {
                 $stmt->execute([':studentId' => $studentId, ':offeringId' => $offeringId]);
             }
+            $submissionStmt = $conn->prepare('INSERT INTO schedule_submission (student_id, is_submitted, submitted_at) VALUES (:studentId, FALSE, NULL) ON CONFLICT (student_id) DO UPDATE SET is_submitted = FALSE, submitted_at = NULL');
+            $submissionStmt->execute([':studentId' => $studentId]);
             $conn->commit();
             respond(['success' => true]);
         } catch (Exception $e) {
             if ($conn->inTransaction()) $conn->rollBack();
             respond(['success' => false, 'message' => $e->getMessage()], 500);
         }
+    }
+
+    if ($resource === 'submit_schedule') {
+        $studentId = trim((string) ($data['studentId'] ?? ''));
+        if ($studentId === '') {
+            respond(['success' => false, 'message' => 'Student ID is required'], 400);
+        }
+        $conn->beginTransaction();
+        $enrollmentStmt = $conn->prepare('SELECT 1 FROM plotting WHERE TRIM(student_id) = TRIM(:studentId) LIMIT 1');
+        $enrollmentStmt->execute([':studentId' => $studentId]);
+        if (!$enrollmentStmt->fetchColumn()) {
+            $conn->rollBack();
+            respond(['success' => false, 'message' => 'Add at least one class before submitting your schedule'], 400);
+        }
+        $submissionStmt = $conn->prepare('INSERT INTO schedule_submission (student_id, is_submitted, submitted_at) VALUES (:studentId, TRUE, CURRENT_TIMESTAMP) ON CONFLICT (student_id) DO UPDATE SET is_submitted = TRUE, submitted_at = CURRENT_TIMESTAMP');
+        $submissionStmt->execute([':studentId' => $studentId]);
+        $conn->commit();
+        respond(['success' => true, 'message' => 'Schedule submitted successfully']);
     }
 
     respond(['success' => false, 'message' => 'Unknown POST resource'], 404);

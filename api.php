@@ -30,12 +30,30 @@ function requestData() {
     return is_array($body) ? $body : [];
 }
 
+function getOrCreateInstructorId(PDO $conn, string $name): int {
+    $cleanName = trim($name);
+    if ($cleanName === '') {
+        throw new InvalidArgumentException('Instructor name cannot be empty');
+    }
+
+    $stmt = $conn->prepare('SELECT instructor_id FROM instructor WHERE LOWER(TRIM(instructor_name)) = LOWER(TRIM(:name)) LIMIT 1');
+    $stmt->execute([':name' => $cleanName]);
+    $id = $stmt->fetchColumn();
+    if ($id !== false && $id !== null) {
+        return (int) $id;
+    }
+
+    $insert = $conn->prepare('INSERT INTO instructor (instructor_name) VALUES (:name) RETURNING instructor_id');
+    $insert->execute([':name' => $cleanName]);
+    return (int) $insert->fetchColumn();
+}
+
 $resource = $_GET['resource'] ?? '';
 
 try {
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         if ($resource === 'subjects') {
-            $rows = $conn->query('SELECT subject_id AS id, TRIM(subject_code) AS code, subject_name AS name, year_level AS "yearLevel" FROM subject ORDER BY subject_id')->fetchAll(PDO::FETCH_ASSOC);
+            $rows = $conn->query('SELECT subject_id AS id, TRIM(subject_code) AS code, subject_name AS name, year_level AS "yearLevel", semester FROM subject ORDER BY year_level, semester, subject_id')->fetchAll(PDO::FETCH_ASSOC);
             respond($rows);
         }
 
@@ -110,9 +128,16 @@ try {
 
         if ($resource === 'students') {
             $sql = "SELECT student_id AS id, student_id AS \"studentId\",
-                           CONCAT_WS(' ', first_name, last_name) AS name
+                           CONCAT_WS(' ', first_name, last_name) AS name,
+                           year_level AS \"yearLevel\",
+                           semester
                     FROM account ORDER BY student_id";
             respond($conn->query($sql)->fetchAll(PDO::FETCH_ASSOC));
+        }
+
+        if ($resource === 'instructors') {
+            $rows = $conn->query('SELECT instructor_id AS id, instructor_name AS name FROM instructor ORDER BY instructor_name')->fetchAll(PDO::FETCH_ASSOC);
+            respond($rows);
         }
 
         if ($resource === 'enrolled_courses') {
@@ -130,6 +155,7 @@ try {
                            o.class_type AS type,
                            o.offering_id
                     FROM plotting p
+                    JOIN schedule_submission ss ON TRIM(ss.student_id) = TRIM(p.student_id) AND ss.is_submitted = TRUE
                     JOIN offering o ON o.offering_id = p.offering_id
                     JOIN subject sub ON sub.subject_id = o.subject_id
                     LEFT JOIN schedule sc ON sc.schedule_id = o.schedule_id
@@ -192,39 +218,128 @@ try {
         respond(['success' => true]);
     }
 
+    if ($resource === 'admin') {
+        $action = (string) ($data['action'] ?? '');
+
+        if ($action === 'login') {
+            $username = trim((string) ($data['username'] ?? ''));
+            $password = (string) ($data['password'] ?? '');
+
+            if ($username === '' || $password === '') {
+                respond(['success' => false, 'message' => 'Username and password are required'], 400);
+            }
+
+            $stmt = $conn->prepare('SELECT admin_id, username, password_hash, display_name, is_active FROM admin_account WHERE LOWER(username) = LOWER(:username) LIMIT 1');
+            $stmt->execute([':username' => $username]);
+            $admin = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$admin || !filter_var($admin['is_active'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                respond(['success' => false, 'message' => 'Invalid admin username or password'], 401);
+            }
+
+            if (!password_verify($password, $admin['password_hash'])) {
+                respond(['success' => false, 'message' => 'Invalid admin username or password'], 401);
+            }
+
+            unset($admin['password_hash']);
+            respond(['success' => true, 'admin' => $admin]);
+        }
+
+        if ($action === 'changePassword') {
+            $username = trim((string) ($data['username'] ?? ''));
+            $currentPassword = (string) ($data['currentPassword'] ?? '');
+            $newPassword = (string) ($data['newPassword'] ?? '');
+
+            if ($username === '' || $currentPassword === '' || $newPassword === '') {
+                respond(['success' => false, 'message' => 'Current password and new password are required'], 400);
+            }
+
+            if (strlen($newPassword) < 10) {
+                respond(['success' => false, 'message' => 'New password must be at least 10 characters'], 400);
+            }
+
+            $stmt = $conn->prepare('SELECT admin_id, username, password_hash, is_active FROM admin_account WHERE LOWER(username) = LOWER(:username) LIMIT 1 FOR UPDATE');
+            $stmt->execute([':username' => $username]);
+            $admin = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$admin || !filter_var($admin['is_active'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                respond(['success' => false, 'message' => 'Admin account not found or inactive'], 401);
+            }
+
+            if (!password_verify($currentPassword, $admin['password_hash'])) {
+                respond(['success' => false, 'message' => 'Current password is incorrect'], 401);
+            }
+
+            $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
+            $update = $conn->prepare('UPDATE admin_account SET password_hash = :password_hash WHERE admin_id = :admin_id');
+            $update->execute([':password_hash' => $newHash, ':admin_id' => (int) $admin['admin_id']]);
+
+            respond(['success' => true, 'message' => 'Password updated successfully']);
+        }
+
+        respond(['success' => false, 'message' => 'Unknown admin action'], 400);
+    }
+
+    if ($resource === 'instructors') {
+        $name = trim((string) ($data['name'] ?? $data['instructor_name'] ?? $data['instructorName'] ?? ''));
+        if ($name === '') {
+            respond(['success' => false, 'message' => 'Instructor name is required'], 400);
+        }
+
+        $stmt = $conn->prepare('SELECT instructor_id AS id, instructor_name AS name FROM instructor WHERE LOWER(TRIM(instructor_name)) = LOWER(TRIM(:name)) LIMIT 1');
+        $stmt->execute([':name' => $name]);
+        $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($existing) {
+            respond(['success' => true, 'id' => (int) $existing['id'], 'name' => $existing['name']]);
+        }
+
+        $insert = $conn->prepare('INSERT INTO instructor (instructor_name) VALUES (:name) RETURNING instructor_id');
+        $insert->execute([':name' => $name]);
+        $id = (int) $insert->fetchColumn();
+        respond(['success' => true, 'id' => $id, 'name' => $name]);
+    }
+
     if ($resource === 'subjects') {
         $code = trim((string) ($data['code'] ?? ''));
         $name = trim((string) ($data['name'] ?? ''));
         $yearLevel = (int) ($data['yearLevel'] ?? 1);
+        $semester = (int) ($data['semester'] ?? 1);
         if ($code === '' || $name === '') {
             respond(['success' => false, 'message' => 'Subject code and name are required'], 400);
         }
-        if ($yearLevel < 1 || $yearLevel > 4) {
-            respond(['success' => false, 'message' => 'Year level must be between 1 and 4'], 400);
+        if ($yearLevel < 1 || $yearLevel > 5) {
+            respond(['success' => false, 'message' => 'Year level must be between 1 and 5'], 400);
+        }
+        if (!in_array($semester, [1, 2], true)) {
+            respond(['success' => false, 'message' => 'Semester must be 1 or 2'], 400);
         }
         if (strlen($code) > 10) {
             respond(['success' => false, 'message' => 'Subject code must be 10 characters or fewer'], 400);
         }
         if (!empty($data['id']) && is_numeric($data['id'])) {
-            $stmt = $conn->prepare('UPDATE subject SET subject_code = :code, subject_name = :name, year_level = :year_level WHERE subject_id = :id');
-            $stmt->execute([':id' => $data['id'], ':code' => $code, ':name' => $name, ':year_level' => $yearLevel]);
+            $stmt = $conn->prepare('UPDATE subject SET subject_code = :code, subject_name = :name, year_level = :year_level, semester = :semester WHERE subject_id = :id');
+            $stmt->execute([':id' => $data['id'], ':code' => $code, ':name' => $name, ':year_level' => $yearLevel, ':semester' => $semester]);
             $id = (int) $data['id'];
         } else {
-            $stmt = $conn->prepare('INSERT INTO subject (subject_code, subject_name, year_level) VALUES (:code, :name, :year_level) RETURNING subject_id');
-            $stmt->execute([':code' => $code, ':name' => $name, ':year_level' => $yearLevel]);
+            $stmt = $conn->prepare('INSERT INTO subject (subject_code, subject_name, year_level, semester) VALUES (:code, :name, :year_level, :semester) RETURNING subject_id');
+            $stmt->execute([':code' => $code, ':name' => $name, ':year_level' => $yearLevel, ':semester' => $semester]);
             $id = (int) $stmt->fetchColumn();
         }
-        respond(['success' => true, 'id' => $id, 'code' => $code, 'name' => $name, 'yearLevel' => $yearLevel]);
+        respond(['success' => true, 'id' => $id, 'code' => $code, 'name' => $name, 'yearLevel' => $yearLevel, 'semester' => $semester]);
     }
 
-    if ($resource === 'students' && ($data['action'] ?? '') === 'endSemester') {
+    if ($resource === 'students' && ($data['action'] ?? '') === 'setSemester') {
+        $semester = (int) ($data['semester'] ?? 0);
+        if (!in_array($semester, [1, 2], true)) {
+            respond(['success' => false, 'message' => 'Semester must be 1 or 2'], 400);
+        }
         $conn->beginTransaction();
         $clearSchedules = $conn->prepare('DELETE FROM plotting');
         $clearSchedules->execute();
-        $stmt = $conn->prepare('UPDATE account SET year_level = NULL');
-        $stmt->execute();
+        $stmt = $conn->prepare('UPDATE account SET semester = :semester');
+        $stmt->execute([':semester' => $semester]);
         $conn->commit();
-        respond(['success' => true, 'updated' => $stmt->rowCount()]);
+        respond(['success' => true, 'semester' => $semester, 'updated' => $stmt->rowCount()]);
     }
 
     if ($resource === 'sections' && array_key_exists('classes', $data)) {
@@ -289,9 +404,7 @@ try {
                 $conn->rollBack();
                 respond(['success' => false, 'message' => 'Each class slot needs a valid type, day, time, and instructor'], 400);
             }
-            $instructorStmt = $conn->prepare('INSERT INTO instructor (instructor_name) VALUES (:name) RETURNING instructor_id');
-            $instructorStmt->execute([':name' => $instructor]);
-            $instructorId = (int) $instructorStmt->fetchColumn();
+            $instructorId = getOrCreateInstructorId($conn, $instructor);
             $roomId = null;
             if (!empty($class['room'])) {
                 $parts = array_map('trim', explode(',', $class['room'], 2));
@@ -367,9 +480,7 @@ try {
             }
         }
 
-        $instructorStmt = $conn->prepare('INSERT INTO instructor (instructor_name) VALUES (:name) RETURNING instructor_id');
-        $instructorStmt->execute([':name' => $data['instructor']]);
-        $instructorId = (int) $instructorStmt->fetchColumn();
+        $instructorId = getOrCreateInstructorId($conn, $data['instructor']);
 
         $roomId = null;
         if (!empty($data['room'])) {
@@ -441,25 +552,7 @@ try {
     }
 
     if ($resource === 'students') {
-        if (empty($data['studentId']) || !is_numeric($data['studentId']) || empty($data['name'])) {
-            respond(['success' => false, 'message' => 'Student ID and name are required'], 400);
-        }
-        $nameParts = preg_split('/\s+/', trim($data['name']), 2);
-        $email = strtolower($data['studentId']) . '@vetsched.local';
-        $params = [
-            ':id' => $data['studentId'],
-            ':email' => $email,
-            ':first' => $nameParts[0],
-            ':last' => $nameParts[1] ?? ''
-        ];
-        if (!empty($data['id']) && is_numeric($data['id'])) {
-            $stmt = $conn->prepare('UPDATE account SET first_name = :first, last_name = :last WHERE student_id = :existing_id');
-            $params[':existing_id'] = $data['id'];
-        } else {
-            $stmt = $conn->prepare('INSERT INTO account (student_id, email, first_name, last_name) VALUES (:id, :email, :first, :last)');
-        }
-        $stmt->execute($params);
-        respond(['success' => true, 'id' => (int) ($data['id'] ?? $data['studentId'])]);
+        respond(['success' => false, 'message' => 'Student accounts are managed through student registration only'], 403);
     }
 
     respond(['success' => false, 'message' => 'Unknown resource'], 404);

@@ -42,8 +42,8 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
 if (strlen($studentId) < 9 || strlen($studentId) > 12) {
     registrationRespond(400, false, "Student ID must contain 9 to 12 digits", "student_id");
 }
-if ($yearLevel < 1 || $yearLevel > 4) {
-    registrationRespond(400, false, "Year level must be between 1 and 4", "year_level");
+if ($yearLevel < 1 || $yearLevel > 5) {
+    registrationRespond(400, false, "Year level must be between 1 and 5", "year_level");
 }
 if (strlen($password) < 10) {
     registrationRespond(400, false, "Password must be at least 10 characters");

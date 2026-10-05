@@ -10,9 +10,9 @@ if (empty($data["email"]) || empty($data["year_level"])) {
     exit;
 }
 
-if ($data["year_level"] < 1 || $data["year_level"] > 4) {
+if ($data["year_level"] < 1 || $data["year_level"] > 5) {
     http_response_code(400);
-    echo json_encode(["success" => false, "message" => "Year level must be between 1 and 4"]);
+    echo json_encode(["success" => false, "message" => "Year level must be between 1 and 5"]);
     exit;
 }
 
@@ -27,7 +27,6 @@ try {
     ]);
 
     // 2. Clear schedule data (plotting table) for this student
-    // First we need to get the student_id from the account table
     $getId = $conn->prepare("SELECT student_id FROM account WHERE email = :email");
     $getId->execute([":email" => $data["email"]]);
     $student = $getId->fetch(PDO::FETCH_ASSOC);

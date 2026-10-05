@@ -18,9 +18,9 @@ if (empty($data["first_name"]) || empty($data["last_name"]) ||
     exit;
 }
 
-if ($data["year_level"] < 1 || $data["year_level"] > 4) {
+if ($data["year_level"] < 1 || $data["year_level"] > 5) {
     http_response_code(400);
-    echo json_encode(["success" => false, "message" => "Year level must be between 1 and 4", "error_field" => "year_level"]);
+    echo json_encode(["success" => false, "message" => "Year level must be between 1 and 5", "error_field" => "year_level"]);
     exit;
 }
 
