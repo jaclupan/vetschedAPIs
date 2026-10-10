@@ -210,6 +210,30 @@ button{font-family:inherit;}
   overflow-y:auto;
 }
 .main-inner{max-width:880px;margin:0 auto;}
+.database-error{
+  max-width:880px;
+  margin:0 auto 18px;
+  padding:14px 16px;
+  border:1px solid #d9a6a0;
+  border-radius:10px;
+  background:#fff1ef;
+  color:#792d27;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+}
+.database-error[hidden]{display:none;}
+.database-error button{
+  border:0;
+  border-radius:7px;
+  padding:8px 13px;
+  background:#792d27;
+  color:white;
+  font:inherit;
+  font-weight:600;
+  cursor:pointer;
+}
 
 .topbar{
   display:flex;

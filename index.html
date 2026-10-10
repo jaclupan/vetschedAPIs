@@ -77,6 +77,10 @@
   </aside>
 
   <main class="main">
+    <div class="database-error" id="databaseError" role="alert" hidden>
+      <span>Could not load data from PostgreSQL. Check your connection and try again.</span>
+      <button type="button" id="retryDatabaseBtn">Retry</button>
+    </div>
     <div class="main-inner" id="mainInner"></div>
   </main>
 </div>

@@ -1,4 +1,7 @@
 db.php
 test_connection.php
 vetsched_emailjs_config.php
+.env
+.env.*
+!.env.example
 vetsched.sql

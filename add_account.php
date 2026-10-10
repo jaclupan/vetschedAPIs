@@ -74,9 +74,9 @@ if (empty($data["first_name"]) || empty($data["last_name"]) ||
 
 $email = strtolower(trim($data["email"]));
 
-if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+if (!filter_var($email, FILTER_VALIDATE_EMAIL) || substr($email, -13) !== "@phinmaed.com") {
     http_response_code(400);
-    echo json_encode(["success" => false, "message" => "Enter a valid email address", "error_field" => "email"]);
+    echo json_encode(["success" => false, "message" => "Only @phinmaed.com email addresses are allowed", "error_field" => "email"]);
     exit;
 }
 

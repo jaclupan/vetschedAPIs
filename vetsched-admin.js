@@ -6,15 +6,9 @@ const API_URL = (() => {
 	return new URL('./api.php', window.location.href).toString();
 })();
 async function loadList(key){
-	try{
-		const response = await fetch(`${API_URL}?resource=${encodeURIComponent(key)}&_=${Date.now()}`, {cache:'no-store'});
-		if(!response.ok) throw new Error(`API request failed (${response.status})`);
-		return await response.json();
-	}catch(error){
-		console.error('API load error', error);
-		showToast('Could not load data from PostgreSQL');
-		return [];
-	}
+	const response = await fetch(`${API_URL}?resource=${encodeURIComponent(key)}&_=${Date.now()}`, {cache:'no-store'});
+	if(!response.ok) throw new Error(`API request failed (${response.status})`);
+	return await response.json();
 }
 async function saveList(key,list){
 	try{
@@ -132,7 +126,8 @@ const uid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).sli
 function fmtTime(t){if(!t)return'';const[h,m]=t.split(':').map(Number),period=h>=12?'PM':'AM',h12=h%12===0?12:h%12;return`${h12}:${String(m).padStart(2,'0')} ${period}`;}
 function formatDays(days){const order=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];return(days||[]).slice().sort((a,b)=>order.indexOf(a)-order.indexOf(b));}
 function initials(name){return name.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('');}
-function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(showToast._tm);showToast._tm=setTimeout(()=>t.classList.remove('show'),2200);}
+function showToast(msg,duration=2200){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(showToast._tm);showToast._tm=duration>0?setTimeout(()=>t.classList.remove('show'),duration):null;}
+function hideToast(){const t=document.getElementById('toast');clearTimeout(showToast._tm);showToast._tm=null;t.classList.remove('show');}
 function escapeHtml(str){const d=document.createElement('div');d.textContent=str??'';return d.innerHTML;}
 function renderInstructorOptions(selectEl, selectedName = '') {
   if(!selectEl) return;
@@ -194,12 +189,6 @@ async function promptForInstructor(selectEl, fallbackValue = '') {
   renderInstructorOptions(selectEl, created.name);
   selectEl.value = created.name;
 }
-async function loadInstructors(){
-  const loaded = await loadList('instructors');
-  instructors = Array.isArray(loaded) ? loaded.map(item => ({ id: item.id ?? item.instructor_id, name: item.name ?? item.instructor_name ?? '' })).filter(item => item.name) : [];
-  return instructors;
-}
-
 /* ---------------- navigation ---------------- */
 function toggleNavMenu(force){const menu=document.getElementById('navMenu'),open=force!==undefined?force:!menu.classList.contains('open');menu.classList.toggle('open',open);}
 function switchView(view){currentView=view;toggleNavMenu(false);renderAll();}
@@ -530,9 +519,10 @@ let lastDatabaseSnapshot='';
 async function refreshFromDatabase(showLoading=false){
 	if(isRefreshing||!currentAdmin)return;
 	isRefreshing=true;
-	if(showLoading)document.getElementById('mainInner').innerHTML='<div style="padding:60px;color:var(--charcoal-soft);">Loading…</div>';
 	try{
-		const [freshSubjects,freshSections,freshStudents]=await Promise.all([loadList('subjects'),loadList('sections'),loadList('students')]);
+		const [freshSubjects,freshSections,freshStudents,freshInstructors]=await Promise.all([loadList('subjects'),loadList('sections'),loadList('students'),loadList('instructors')]);
+		instructors=freshInstructors.map(item=>({id:item.id??item.instructor_id,name:item.name??item.instructor_name??''})).filter(item=>item.name);
+		document.getElementById('databaseError').hidden=true;
 		const parseDatabaseArray=value=>Array.isArray(value)?value:(typeof value==='string'&&value.startsWith('{')&&value.endsWith('}')?value.slice(1,-1).split(',').filter(Boolean):[]);
 		subjects=freshSubjects.map(subject=>({...subject,id:String(subject.id)}));
 		sections=freshSections.map(section=>({...section,id:String(section.id),subjectId:section.subjectId==null?null:String(section.subjectId),classTypes:parseDatabaseArray(section.classTypes),days:parseDatabaseArray(section.days),scheduleIds:parseDatabaseArray(section.scheduleIds).map(id=>String(id))}));
@@ -542,15 +532,17 @@ async function refreshFromDatabase(showLoading=false){
 		if(!showLoading&&databaseSnapshot===lastDatabaseSnapshot)return;
 		lastDatabaseSnapshot=databaseSnapshot;
 		renderAll();
+	}catch(error){
+		console.error('API load error',error);
+		document.getElementById('databaseError').hidden=false;
+		if(showLoading)document.getElementById('mainInner').replaceChildren();
 	}finally{
 		isRefreshing=false;
 	}
 }
-async function init(){await loadInstructors();await refreshFromDatabase(true);}
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refreshFromDatabase();});
-window.addEventListener('focus',()=>refreshFromDatabase());
+async function init(){await refreshFromDatabase(true);}
+document.getElementById('retryDatabaseBtn').addEventListener('click',()=>refreshFromDatabase(true));
 document.getElementById('loginUser').focus();
 const sectionRefreshObserver=new MutationObserver(()=>{const controls=document.querySelector('.section-controls');if(!controls||controls.querySelector('#refreshSectionsBtn'))return;const button=document.createElement('button');button.className='icon-btn';button.id='refreshSectionsBtn';button.title='Refresh sections';button.setAttribute('aria-label','Refresh sections');button.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8.1 8.1 0 0 0-14.9-4L3 10"/><path d="M3 4v6h6"/><path d="M4 13a8.1 8.1 0 0 0 14.9 4L21 14"/><path d="M21 20v-6h-6"/></svg>';button.addEventListener('click',()=>refreshFromDatabase(true));controls.insertBefore(button,controls.firstChild);});
 sectionRefreshObserver.observe(document.getElementById('mainInner'),{childList:true,subtree:true});
-setInterval(()=>{if(currentAdmin&&!document.querySelector('.overlay.open'))refreshFromDatabase();},5000);
 restoreRememberedLogin();
