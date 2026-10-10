@@ -1,19 +1,63 @@
 <?php
+function vetschedReadEnvValue(string $name): string {
+    $value = getenv($name);
+    if ($value !== false && $value !== '') {
+        return $value;
+    }
+
+    $envFile = __DIR__ . DIRECTORY_SEPARATOR . '.env';
+    if (!is_file($envFile)) {
+        return '';
+    }
+
+    $lines = file($envFile, FILE_IGNORE_NEW_LINES);
+    if ($lines === false) {
+        return '';
+    }
+
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '' || str_starts_with($line, '#')) {
+            continue;
+        }
+
+        if (!preg_match('/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/', $line, $matches)) {
+            continue;
+        }
+
+        if ($matches[1] !== $name) {
+            continue;
+        }
+
+        $value = trim($matches[2]);
+        if (strlen($value) >= 2 &&
+            (($value[0] === '"' && $value[strlen($value) - 1] === '"') ||
+             ($value[0] === "'" && $value[strlen($value) - 1] === "'"))) {
+            return substr($value, 1, -1);
+        }
+
+        return $value;
+    }
+
+    return '';
+}
+
 function sendEmailJsResetCode($recipient, $code) {
     $configPath = __DIR__ . DIRECTORY_SEPARATOR . "vetsched_emailjs_config.php";
     if (!is_file($configPath)) {
         $configPath = __DIR__ . DIRECTORY_SEPARATOR . "emailjs_config.php";
     }
-    if (!is_file($configPath)) {
-        error_log("EmailJS is not configured. Expected config at " . $configPath);
-        return false;
+
+    $config = [];
+    if (is_file($configPath)) {
+        $config = require $configPath;
     }
 
-    $config = require $configPath;
-    $serviceId = $config["service_id"] ?? "";
-    $templateId = $config["template_id"] ?? "";
-    $publicKey = $config["public_key"] ?? "";
-    $privateKey = $config["private_key"] ?? "";
+    $serviceId = vetschedReadEnvValue('VETSCHED_EMAILJS_SERVICE_ID') ?: vetschedReadEnvValue('EMAILJS_SERVICE_ID') ?: ($config["service_id"] ?? "");
+    $templateId = vetschedReadEnvValue('VETSCHED_EMAILJS_TEMPLATE_ID') ?: vetschedReadEnvValue('EMAILJS_TEMPLATE_ID') ?: ($config["template_id"] ?? "");
+    $publicKey = vetschedReadEnvValue('VETSCHED_EMAILJS_PUBLIC_KEY') ?: vetschedReadEnvValue('EMAILJS_PUBLIC_KEY') ?: ($config["public_key"] ?? "");
+    $privateKey = vetschedReadEnvValue('VETSCHED_EMAILJS_PRIVATE_KEY') ?: vetschedReadEnvValue('EMAILJS_PRIVATE_KEY') ?: ($config["private_key"] ?? "");
+
     if (!$serviceId || !$templateId || !$publicKey || !$privateKey ||
         strpos($templateId, "YOUR_") === 0 || strpos($publicKey, "YOUR_") === 0 ||
         strpos($privateKey, "YOUR_") === 0) {
