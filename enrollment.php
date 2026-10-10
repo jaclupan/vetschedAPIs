@@ -81,12 +81,18 @@ try {
 
         $conn->beginTransaction();
         try {
-            $deleteStmt = $conn->prepare("DELETE FROM plotting WHERE student_id = :studentId AND offering_id = :offeringId");
-            $stmt = $conn->prepare("INSERT INTO plotting (student_id, offering_id, status) VALUES (:studentId, :offeringId, 'Enrolled')");
+            $placeholders = implode(',', array_fill(0, count($offeringIds), '?'));
+            $deleteStmt = $conn->prepare("DELETE FROM plotting WHERE student_id = ? AND offering_id IN ($placeholders)");
+            $deleteStmt->execute(array_merge([$studentId], array_values($offeringIds)));
+
+            $valueSql = implode(',', array_fill(0, count($offeringIds), '(?, ?, \'Enrolled\')'));
+            $insertParams = [];
             foreach ($offeringIds as $offeringId) {
-                $deleteStmt->execute([':studentId' => $studentId, ':offeringId' => $offeringId]);
-                $stmt->execute([':studentId' => $studentId, ':offeringId' => $offeringId]);
+                $insertParams[] = $studentId;
+                $insertParams[] = $offeringId;
             }
+            $stmt = $conn->prepare("INSERT INTO plotting (student_id, offering_id, status) VALUES $valueSql");
+            $stmt->execute($insertParams);
             $conn->commit();
             respond(['success' => true]);
         } catch (Exception $e) {
@@ -104,10 +110,9 @@ try {
 
         $conn->beginTransaction();
         try {
-            $stmt = $conn->prepare("DELETE FROM plotting WHERE student_id = :studentId AND offering_id = :offeringId");
-            foreach ($offeringIds as $offeringId) {
-                $stmt->execute([':studentId' => $studentId, ':offeringId' => $offeringId]);
-            }
+            $placeholders = implode(',', array_fill(0, count($offeringIds), '?'));
+            $stmt = $conn->prepare("DELETE FROM plotting WHERE student_id = ? AND offering_id IN ($placeholders)");
+            $stmt->execute(array_merge([$studentId], array_values($offeringIds)));
             $conn->commit();
             respond(['success' => true]);
         } catch (Exception $e) {

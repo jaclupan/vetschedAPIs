@@ -69,13 +69,13 @@ try {
     $subjectStmt->execute($params);
     $subjects = $subjectStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $response = [];
-
-    foreach ($subjects as $subject) {
-        $subjectId = (int) $subject['id'];
-
+    $sectionsBySubject = [];
+    if ($subjects) {
+        $subjectIds = array_map(static fn(array $subject): int => (int) $subject['id'], $subjects);
+        $placeholders = implode(',', array_fill(0, count($subjectIds), '?'));
         $sectionSql = "
-            SELECT DISTINCT s.section_id AS id,
+            SELECT o.subject_id,
+                   s.section_id AS id,
                    s.section_name AS \"type\",
                    MIN(sc.start_time) AS start,
                    MAX(sc.end_time) AS end,
@@ -87,23 +87,19 @@ try {
                    MAX(o.class_type) AS \"classType\",
                    ARRAY_AGG(DISTINCT o.class_type) FILTER (WHERE o.class_type IS NOT NULL) AS \"classTypes\"
             FROM section s
-            LEFT JOIN schedule sc ON sc.section_id = s.section_id
-            LEFT JOIN offering o ON o.schedule_id = sc.schedule_id AND o.subject_id = :subject_id
+            INNER JOIN schedule sc ON sc.section_id = s.section_id
+            INNER JOIN offering o ON o.schedule_id = sc.schedule_id AND o.subject_id IN ($placeholders)
             LEFT JOIN instructor i ON i.instructor_id = o.instructor_id
             LEFT JOIN room r ON r.room_id = o.room_id
             WHERE s.is_open = TRUE
-            AND (o.subject_id = :subject_id OR EXISTS (
-                SELECT 1 FROM offering o2 WHERE o2.subject_id = :subject_id_2 AND o2.schedule_id = sc.schedule_id
-            ))
-            GROUP BY s.section_id, s.section_name
+            GROUP BY o.subject_id, s.section_id, s.section_name, s.max_capacity
             ORDER BY s.section_id
         ";
-
         $sectionStmt = $conn->prepare($sectionSql);
-        $sectionStmt->execute([':subject_id' => $subjectId, ':subject_id_2' => $subjectId]);
-        $sections = $sectionStmt->fetchAll(PDO::FETCH_ASSOC);
-
-        foreach ($sections as &$section) {
+        $sectionStmt->execute($subjectIds);
+        foreach ($sectionStmt->fetchAll(PDO::FETCH_ASSOC) as $section) {
+            $subjectId = (int) $section['subject_id'];
+            unset($section['subject_id']);
             $section['days'] = parsePgArray($section['days']);
             $section['subjectId'] = $subjectId;
             $section['start'] = $section['start'] ?? '';
@@ -113,13 +109,17 @@ try {
             $section['maxCapacity'] = $section['maxCapacity'] ?? 0;
             $section['classType'] = $section['classType'] ?? 'Lecture';
             $section['classTypes'] = parsePgArray($section['classTypes']);
+            $sectionsBySubject[$subjectId][] = $section;
         }
+    }
 
-        $subject['sections'] = $sections;
+    $response = [];
+    foreach ($subjects as $subject) {
+        $subject['sections'] = $sectionsBySubject[(int) $subject['id']] ?? [];
         $response[] = $subject;
     }
 
-    echo json_encode($response, JSON_PRETTY_PRINT);
+    echo json_encode($response);
 } catch (Throwable $e) {
     http_response_code(500);
     echo json_encode([

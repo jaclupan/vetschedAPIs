@@ -21,8 +21,37 @@ function parsePgArray($pgArray) {
 
 function respond($data, $status = 200) {
     http_response_code($status);
-    echo json_encode($data);
+    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
+}
+
+function groupSectionSlots(array $allSlots): array {
+    $classes = [];
+    $allOfferingIds = [];
+    foreach ($allSlots as $slot) {
+        $allOfferingIds[] = (int) $slot['offering_id'];
+        $key = ($slot['classType'] ?: 'Lecture') . '|' . $slot['start'] . '|' . $slot['end'] . '|' . $slot['instructor'] . '|' . $slot['room'];
+        if (!isset($classes[$key])) {
+            $classes[$key] = [
+                'classType' => $slot['classType'] ?: 'Lecture',
+                'start' => $slot['start'],
+                'end' => $slot['end'],
+                'days' => [$slot['day']],
+                'instructor' => $slot['instructor'],
+                'room' => $slot['room'],
+                'offeringIds' => [(int) $slot['offering_id']]
+            ];
+        } else {
+            if (!in_array($slot['day'], $classes[$key]['days'])) {
+                $classes[$key]['days'][] = $slot['day'];
+            }
+            if (!in_array((int) $slot['offering_id'], $classes[$key]['offeringIds'])) {
+                $classes[$key]['offeringIds'][] = (int) $slot['offering_id'];
+            }
+        }
+    }
+
+    return [array_values($classes), array_values(array_unique($allOfferingIds))];
 }
 
 function requestData() {
@@ -62,61 +91,41 @@ try {
                            s.is_open AS \"isOpen\",
                            s.subject_id AS \"subjectId\",
                            s.max_capacity AS \"maxCapacity\",
-                           (SELECT COUNT(DISTINCT student_id)
-                            FROM plotting
-                            WHERE offering_id IN (
-                                SELECT offering_id FROM offering WHERE section_id = s.section_id
-                                UNION
-                                SELECT offering_id FROM offering WHERE schedule_id IN (SELECT schedule_id FROM schedule WHERE section_id = s.section_id)
-                            )) AS \"enrollmentCount\"
+                           COUNT(DISTINCT p.student_id) AS \"enrollmentCount\"
                     FROM section s
+                    LEFT JOIN (
+                        SELECT section_id, offering_id FROM offering WHERE section_id IS NOT NULL
+                        UNION
+                        SELECT sc.section_id, o.offering_id
+                        FROM offering o
+                        INNER JOIN schedule sc ON sc.schedule_id = o.schedule_id
+                    ) so ON so.section_id = s.section_id
+                    LEFT JOIN plotting p ON p.offering_id = so.offering_id
+                    GROUP BY s.section_id, s.section_name, s.is_open, s.subject_id, s.max_capacity
                     ORDER BY s.section_id";
             $rows = $conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+
+            $classSql = "SELECT sc.section_id,
+                               o.class_type AS \"classType\", sc.day_of_the_week AS day,
+                               sc.start_time AS start, sc.end_time AS \"end\",
+                               i.instructor_name AS instructor,
+                               CONCAT_WS(', ', NULLIF(TRIM(r.building), ''), NULLIF(TRIM(r.room_num), '')) AS room,
+                               o.offering_id
+                        FROM schedule sc
+                        JOIN offering o ON o.schedule_id = sc.schedule_id
+                            AND (o.section_id = sc.section_id OR o.section_id IS NULL)
+                        LEFT JOIN instructor i ON i.instructor_id = o.instructor_id
+                        LEFT JOIN room r ON r.room_id = o.room_id
+                        WHERE sc.section_id IS NOT NULL";
+            $slotsBySection = [];
+            foreach ($conn->query($classSql)->fetchAll(PDO::FETCH_ASSOC) as $slot) {
+                $slotsBySection[(int) $slot['section_id']][] = $slot;
+            }
+
             foreach ($rows as &$row) {
-                // 3. Get all slots for this section
-                $classSql = "SELECT o.class_type AS \"classType\", sc.day_of_the_week AS day,
-                                   sc.start_time AS start, sc.end_time AS \"end\",
-                                   i.instructor_name AS instructor,
-                                   CONCAT_WS(', ', NULLIF(TRIM(r.building), ''), NULLIF(TRIM(r.room_num), '')) AS room,
-                                   o.offering_id
-                            FROM schedule sc
-                            JOIN offering o ON o.schedule_id = sc.schedule_id
-                                AND (o.section_id = sc.section_id OR o.section_id IS NULL)
-                            LEFT JOIN instructor i ON i.instructor_id = o.instructor_id
-                            LEFT JOIN room r ON r.room_id = o.room_id
-                            WHERE sc.section_id = :section";
-                $classStmt = $conn->prepare($classSql);
-                $classStmt->execute([':section' => $row['id']]);
-                $allSlots = $classStmt->fetchAll(PDO::FETCH_ASSOC);
-
-                // Group slots into classes (same type, time, instructor, room)
-                $classes = [];
-                $allOfferingIds = [];
-                foreach ($allSlots as $slot) {
-                    $allOfferingIds[] = (int)$slot['offering_id'];
-                    $key = ($slot['classType'] ?: 'Lecture') . '|' . $slot['start'] . '|' . $slot['end'] . '|' . $slot['instructor'] . '|' . $slot['room'];
-                    if (!isset($classes[$key])) {
-                        $classes[$key] = [
-                            'classType' => $slot['classType'] ?: 'Lecture',
-                            'start' => $slot['start'],
-                            'end' => $slot['end'],
-                            'days' => [$slot['day']],
-                            'instructor' => $slot['instructor'],
-                            'room' => $slot['room'],
-                            'offeringIds' => [(int)$slot['offering_id']]
-                        ];
-                    } else {
-                        if (!in_array($slot['day'], $classes[$key]['days'])) {
-                            $classes[$key]['days'][] = $slot['day'];
-                        }
-                        if (!in_array((int)$slot['offering_id'], $classes[$key]['offeringIds'])) {
-                            $classes[$key]['offeringIds'][] = (int)$slot['offering_id'];
-                        }
-                    }
-                }
-
-                $row['classes'] = array_values($classes);
-                $row['offeringIds'] = array_values(array_unique($allOfferingIds));
+                [$classes, $allOfferingIds] = groupSectionSlots($slotsBySection[(int) $row['id']] ?? []);
+                $row['classes'] = $classes;
+                $row['offeringIds'] = $allOfferingIds;
                 $row['id'] = (int)$row['id'];
                 $row['subjectId'] = $row['subjectId'] !== null ? (int)$row['subjectId'] : null;
                 $row['maxCapacity'] = (int)$row['maxCapacity'];
@@ -124,6 +133,7 @@ try {
                 $row['remainingSeats'] = max($row['maxCapacity'] - $row['enrollmentCount'], 0);
                 $row['isOpen'] = (bool)$row['isOpen'];
             }
+            unset($row);
             respond($rows);
         }
 
@@ -395,6 +405,9 @@ try {
         $stmt = $conn->prepare('DELETE FROM schedule WHERE section_id = :section');
         $stmt->execute([':section' => $sectionId]);
 
+        $roomStmt = $conn->prepare('INSERT INTO room (building, room_num) VALUES (:building, :room) RETURNING room_id');
+        $scheduleStmt = $conn->prepare('INSERT INTO schedule (day_of_the_week, start_time, end_time, section_id) VALUES (:day, :start, :end, :section) RETURNING schedule_id');
+        $offeringStmt = $conn->prepare('INSERT INTO offering (subject_id, room_id, instructor_id, max_capacity, schedule_id, section_id, class_type) VALUES (:subject, :room, :instructor, :capacity, :schedule, :section, :class_type)');
         foreach ($classes as $class) {
             $classType = ucfirst(strtolower(trim((string) ($class['classType'] ?? ''))));
             $days = is_array($class['days'] ?? null) ? array_values(array_filter($class['days'])) : [];
@@ -409,14 +422,11 @@ try {
             $roomId = null;
             if (!empty($class['room'])) {
                 $parts = array_map('trim', explode(',', $class['room'], 2));
-                $roomStmt = $conn->prepare('INSERT INTO room (building, room_num) VALUES (:building, :room) RETURNING room_id');
                 $roomStmt->execute([':building' => $parts[0], ':room' => $parts[1] ?? '']);
                 $roomId = (int) $roomStmt->fetchColumn();
             }
             foreach ($days as $day) {
-                $scheduleStmt = $conn->prepare('INSERT INTO schedule (day_of_the_week, start_time, end_time, section_id) VALUES (:day, :start, :end, :section) RETURNING schedule_id');
                 $scheduleStmt->execute([':day' => $day, ':start' => $start, ':end' => $end, ':section' => $sectionId]);
-                $offeringStmt = $conn->prepare('INSERT INTO offering (subject_id, room_id, instructor_id, max_capacity, schedule_id, section_id, class_type) VALUES (:subject, :room, :instructor, :capacity, :schedule, :section, :class_type)');
                 $offeringStmt->execute([':subject' => $subjectId, ':room' => $roomId, ':instructor' => $instructorId, ':capacity' => $capacity, ':schedule' => $scheduleStmt->fetchColumn(), ':section' => $sectionId, ':class_type' => $classType]);
             }
         }
@@ -430,6 +440,14 @@ try {
             $isOpen = filter_var($data['isOpen'] ?? null, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
             if (!is_numeric($sectionId) || $isOpen === null) {
                 respond(['success' => false, 'message' => 'A valid section ID and open state are required'], 400);
+            }
+
+            if ($isOpen) {
+                $classStmt = $conn->prepare('SELECT 1 FROM offering o JOIN schedule sc ON sc.schedule_id = o.schedule_id WHERE sc.section_id = :section AND (o.section_id = :offering_section OR o.section_id IS NULL) LIMIT 1');
+                $classStmt->execute([':section' => (int)$sectionId, ':offering_section' => (int)$sectionId]);
+                if (!$classStmt->fetchColumn()) {
+                    respond(['success' => false, 'message' => 'Cannot open a section without at least one class'], 409);
+                }
             }
 
             $stmt = $conn->prepare('UPDATE section SET is_open = :is_open WHERE section_id = :id');
@@ -494,6 +512,9 @@ try {
         $days = is_array($data['days'] ?? null) ? $data['days'] : [$data['days'] ?? ''];
         $scheduleStmt = $conn->prepare('SELECT schedule_id FROM schedule WHERE section_id = :section AND day_of_the_week = :day AND start_time = :start AND end_time = :end LIMIT 1');
         $insertScheduleStmt = $conn->prepare('INSERT INTO schedule (day_of_the_week, start_time, end_time, section_id) VALUES (:day, :start, :end, :section) RETURNING schedule_id');
+        $findOfferingStmt = $conn->prepare('SELECT o.offering_id FROM offering o WHERE o.schedule_id = :schedule AND o.class_type = :class_type LIMIT 1');
+        $updateOfferingStmt = $conn->prepare('UPDATE offering SET subject_id = :subject, room_id = :room, instructor_id = :instructor, max_capacity = :capacity, schedule_id = :schedule, section_id = :section, class_type = :class_type WHERE offering_id = :id');
+        $insertOfferingStmt = $conn->prepare('INSERT INTO offering (subject_id, room_id, instructor_id, max_capacity, schedule_id, section_id, class_type) VALUES (:subject, :room, :instructor, :capacity, :schedule, :section, :class_type)');
         foreach (array_filter($days) as $day) {
             $scheduleStmt->execute([':day' => $day, ':start' => $data['start'], ':end' => $data['end'], ':section' => $sectionId]);
             $scheduleId = (int) $scheduleStmt->fetchColumn();
@@ -502,15 +523,12 @@ try {
                 $scheduleId = (int) $insertScheduleStmt->fetchColumn();
             }
 
-            $offeringStmt = $conn->prepare('SELECT o.offering_id FROM offering o WHERE o.schedule_id = :schedule AND o.class_type = :class_type LIMIT 1');
-            $offeringStmt->execute([':schedule' => $scheduleId, ':class_type' => $classType]);
-            $offeringId = $offeringStmt->fetchColumn();
+            $findOfferingStmt->execute([':schedule' => $scheduleId, ':class_type' => $classType]);
+            $offeringId = $findOfferingStmt->fetchColumn();
         if ($offeringId) {
-            $stmt = $conn->prepare('UPDATE offering SET subject_id = :subject, room_id = :room, instructor_id = :instructor, max_capacity = :capacity, schedule_id = :schedule, section_id = :section, class_type = :class_type WHERE offering_id = :id');
-            $stmt->execute([':id' => $offeringId, ':subject' => $data['subjectId'], ':room' => $roomId, ':instructor' => $instructorId, ':capacity' => $data['maxCapacity'] ?? 0, ':schedule' => $scheduleId, ':section' => $sectionId, ':class_type' => $classType]);
+            $updateOfferingStmt->execute([':id' => $offeringId, ':subject' => $data['subjectId'], ':room' => $roomId, ':instructor' => $instructorId, ':capacity' => $data['maxCapacity'] ?? 0, ':schedule' => $scheduleId, ':section' => $sectionId, ':class_type' => $classType]);
         } else {
-            $stmt = $conn->prepare('INSERT INTO offering (subject_id, room_id, instructor_id, max_capacity, schedule_id, section_id, class_type) VALUES (:subject, :room, :instructor, :capacity, :schedule, :section, :class_type)');
-            $stmt->execute([':subject' => $data['subjectId'], ':room' => $roomId, ':instructor' => $instructorId, ':capacity' => $data['maxCapacity'] ?? 0, ':schedule' => $scheduleId, ':section' => $sectionId, ':class_type' => $classType]);
+            $insertOfferingStmt->execute([':subject' => $data['subjectId'], ':room' => $roomId, ':instructor' => $instructorId, ':capacity' => $data['maxCapacity'] ?? 0, ':schedule' => $scheduleId, ':section' => $sectionId, ':class_type' => $classType]);
         }
         }
         $conn->commit();

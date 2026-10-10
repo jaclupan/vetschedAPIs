@@ -393,9 +393,8 @@ async function saveSubject(){
   document.getElementById('subjectCodeError').style.display=code?'none':(valid=false,'block');
   document.getElementById('subjectNameError').style.display=name?'none':(valid=false,'block');
   if(!valid)return;
-  const subject={id:editingSubjectId||uid(),code,name,yearLevel,semester};
-  const candidate=editingSubjectId?subjects.map(item=>item.id===editingSubjectId?{...item,...subject}:item):[...subjects,subject];
-  const saved=await saveList('subjects',candidate); if(!saved)return;
+  const subject={id:editingSubjectId||undefined,code,name,yearLevel,semester};
+  const saved=await saveList('subjects',[subject]); if(!saved)return;
   subjects=saved;
   activeYear=yearLevel;
   activeSemester=semester;
@@ -434,7 +433,7 @@ async function setSemester(){
   }catch(error){console.error('Set semester error',error);showToast(error.message||'Could not set semester');}
 }
 
-const sectionToggleObserver=new MutationObserver(()=>{document.querySelectorAll('.section-card').forEach(card=>{const sectionId=card.dataset.id;const section=sections.find(item=>String(item.id)===String(sectionId));if(!section)return;const actions=card.querySelector('.section-actions');if(actions&&!actions.querySelector('.toggle-section-btn')){const button=document.createElement('button');button.className=`icon-btn toggle-section-btn ${section.isOpen?'section-toggle-close':'section-toggle-open'}`;button.title=`${section.isOpen?'Close':'Open'} section`;button.textContent=section.isOpen?'Close':'Open';button.addEventListener('click',()=>toggleSection(sectionId));actions.insertBefore(button,actions.firstChild);}const summary=card.querySelector('.section-sub');if(summary&&!summary.querySelector('.section-capacity-label')&&section.maxCapacity!=null){const label=document.createElement('span');label.className='section-capacity-label';label.textContent=`Remaining Slots: ${section.remainingSeats??Math.max(Number(section.maxCapacity)-Number(section.enrollmentCount||0),0)}/${section.maxCapacity}`;summary.appendChild(label);}});});
+const sectionToggleObserver=new MutationObserver(()=>{document.querySelectorAll('.section-card').forEach(card=>{const sectionId=card.dataset.id;const section=sections.find(item=>String(item.id)===String(sectionId));if(!section)return;const actions=card.querySelector('.section-actions');if(actions&&!actions.querySelector('.toggle-section-btn')){const button=document.createElement('button');button.className=`icon-btn toggle-section-btn ${section.isOpen?'section-toggle-close':'section-toggle-open'}`;button.title=`${section.isOpen?'Close':'Open'} section`;button.textContent=section.isOpen?'Close':'Open';button.addEventListener('click',()=>toggleSection(sectionId));actions.insertBefore(button,actions.firstChild);}const toggleButton=actions?.querySelector('.toggle-section-btn');if(toggleButton&&!section.isOpen){const hasClasses=Array.isArray(section.classes)&&section.classes.length>0;toggleButton.disabled=!hasClasses;toggleButton.title=hasClasses?'Open section':'Add a class before opening this section';}const summary=card.querySelector('.section-sub');if(summary&&!summary.querySelector('.section-capacity-label')&&section.maxCapacity!=null){const label=document.createElement('span');label.className='section-capacity-label';label.textContent=`Remaining Slots: ${section.remainingSeats??Math.max(Number(section.maxCapacity)-Number(section.enrollmentCount||0),0)}/${section.maxCapacity}`;summary.appendChild(label);}});});
 sectionToggleObserver.observe(document.getElementById('mainInner'),{childList:true,subtree:true});
 
 /* ---------------- grouped section slots ---------------- */

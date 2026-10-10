@@ -89,7 +89,7 @@ $user = $config['VETSCHED_DB_USER'];
 $password = $config['VETSCHED_DB_PASSWORD'];
 
 $dsn = sprintf(
-    'pgsql:host=%s;port=%s;dbname=%s;sslmode=require',
+    'pgsql:host=%s;port=%s;dbname=%s;sslmode=require;connect_timeout=10;keepalives=1;keepalives_idle=30',
     $host,
     $port,
     $dbname
@@ -100,7 +100,11 @@ try {
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
+        PDO::ATTR_PERSISTENT => true,
     ]);
+    if ($conn->inTransaction()) {
+        $conn->rollBack();
+    }
 } catch (Throwable $e) {
     http_response_code(500);
     echo json_encode([

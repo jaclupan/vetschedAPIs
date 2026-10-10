@@ -89,15 +89,18 @@ try {
 
         $conn->beginTransaction();
         try {
-            // First, remove existing records for these offerings for this student to avoid duplicates
-            $deleteStmt = $conn->prepare("DELETE FROM plotting WHERE student_id = :studentId AND offering_id = :offeringId");
+            $placeholders = implode(',', array_fill(0, count($offeringIds), '?'));
+            $deleteStmt = $conn->prepare("DELETE FROM plotting WHERE student_id = ? AND offering_id IN ($placeholders)");
+            $deleteStmt->execute(array_merge([$studentId], array_values($offeringIds)));
 
-            $insertStmt = $conn->prepare("INSERT INTO plotting (student_id, offering_id, status) VALUES (:studentId, :offeringId, 'Enrolled')");
-
+            $valueSql = implode(',', array_fill(0, count($offeringIds), '(?, ?, \'Enrolled\')'));
+            $insertParams = [];
             foreach ($offeringIds as $offeringId) {
-                $deleteStmt->execute([':studentId' => $studentId, ':offeringId' => $offeringId]);
-                $insertStmt->execute([':studentId' => $studentId, ':offeringId' => $offeringId]);
+                $insertParams[] = $studentId;
+                $insertParams[] = $offeringId;
             }
+            $insertStmt = $conn->prepare("INSERT INTO plotting (student_id, offering_id, status) VALUES $valueSql");
+            $insertStmt->execute($insertParams);
             $submissionStmt = $conn->prepare('INSERT INTO schedule_submission (student_id, is_submitted, submitted_at) VALUES (:studentId, FALSE, NULL) ON CONFLICT (student_id) DO UPDATE SET is_submitted = FALSE, submitted_at = NULL');
             $submissionStmt->execute([':studentId' => $studentId]);
 
@@ -118,10 +121,9 @@ try {
 
         $conn->beginTransaction();
         try {
-            $stmt = $conn->prepare("DELETE FROM plotting WHERE student_id = :studentId AND offering_id = :offeringId");
-            foreach ($offeringIds as $offeringId) {
-                $stmt->execute([':studentId' => $studentId, ':offeringId' => $offeringId]);
-            }
+            $placeholders = implode(',', array_fill(0, count($offeringIds), '?'));
+            $stmt = $conn->prepare("DELETE FROM plotting WHERE student_id = ? AND offering_id IN ($placeholders)");
+            $stmt->execute(array_merge([$studentId], array_values($offeringIds)));
             $submissionStmt = $conn->prepare('INSERT INTO schedule_submission (student_id, is_submitted, submitted_at) VALUES (:studentId, FALSE, NULL) ON CONFLICT (student_id) DO UPDATE SET is_submitted = FALSE, submitted_at = NULL');
             $submissionStmt->execute([':studentId' => $studentId]);
             $conn->commit();
