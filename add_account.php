@@ -26,8 +26,8 @@ function verifyEmailAwesome($email) {
                     "Accept: application/json",
                     "X-API-Key: " . $apiKey
                 ],
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_SSL_VERIFYHOST => 0
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2
             ]);
 
             $response = @curl_exec($ch);

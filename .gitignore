@@ -1,4 +1,4 @@
-vetsched_emailjs_config.php
+
 .env
 .env.*
 !.env.example

@@ -80,7 +80,8 @@ try {
                                    CONCAT_WS(', ', NULLIF(TRIM(r.building), ''), NULLIF(TRIM(r.room_num), '')) AS room,
                                    o.offering_id
                             FROM schedule sc
-                            JOIN offering o ON (o.schedule_id = sc.schedule_id OR o.section_id = sc.section_id)
+                            JOIN offering o ON o.schedule_id = sc.schedule_id
+                                AND (o.section_id = sc.section_id OR o.section_id IS NULL)
                             LEFT JOIN instructor i ON i.instructor_id = o.instructor_id
                             LEFT JOIN room r ON r.room_id = o.room_id
                             WHERE sc.section_id = :section";
@@ -415,8 +416,8 @@ try {
             foreach ($days as $day) {
                 $scheduleStmt = $conn->prepare('INSERT INTO schedule (day_of_the_week, start_time, end_time, section_id) VALUES (:day, :start, :end, :section) RETURNING schedule_id');
                 $scheduleStmt->execute([':day' => $day, ':start' => $start, ':end' => $end, ':section' => $sectionId]);
-                $offeringStmt = $conn->prepare('INSERT INTO offering (subject_id, room_id, instructor_id, max_capacity, schedule_id, class_type) VALUES (:subject, :room, :instructor, :capacity, :schedule, :class_type)');
-                $offeringStmt->execute([':subject' => $subjectId, ':room' => $roomId, ':instructor' => $instructorId, ':capacity' => $capacity, ':schedule' => $scheduleStmt->fetchColumn(), ':class_type' => $classType]);
+                $offeringStmt = $conn->prepare('INSERT INTO offering (subject_id, room_id, instructor_id, max_capacity, schedule_id, section_id, class_type) VALUES (:subject, :room, :instructor, :capacity, :schedule, :section, :class_type)');
+                $offeringStmt->execute([':subject' => $subjectId, ':room' => $roomId, ':instructor' => $instructorId, ':capacity' => $capacity, ':schedule' => $scheduleStmt->fetchColumn(), ':section' => $sectionId, ':class_type' => $classType]);
             }
         }
         $conn->commit();
@@ -505,11 +506,11 @@ try {
             $offeringStmt->execute([':schedule' => $scheduleId, ':class_type' => $classType]);
             $offeringId = $offeringStmt->fetchColumn();
         if ($offeringId) {
-            $stmt = $conn->prepare('UPDATE offering SET subject_id = :subject, room_id = :room, instructor_id = :instructor, max_capacity = :capacity, schedule_id = :schedule, class_type = :class_type WHERE offering_id = :id');
-            $stmt->execute([':id' => $offeringId, ':subject' => $data['subjectId'], ':room' => $roomId, ':instructor' => $instructorId, ':capacity' => $data['maxCapacity'] ?? 0, ':schedule' => $scheduleId, ':class_type' => $classType]);
+            $stmt = $conn->prepare('UPDATE offering SET subject_id = :subject, room_id = :room, instructor_id = :instructor, max_capacity = :capacity, schedule_id = :schedule, section_id = :section, class_type = :class_type WHERE offering_id = :id');
+            $stmt->execute([':id' => $offeringId, ':subject' => $data['subjectId'], ':room' => $roomId, ':instructor' => $instructorId, ':capacity' => $data['maxCapacity'] ?? 0, ':schedule' => $scheduleId, ':section' => $sectionId, ':class_type' => $classType]);
         } else {
-            $stmt = $conn->prepare('INSERT INTO offering (subject_id, room_id, instructor_id, max_capacity, schedule_id, class_type) VALUES (:subject, :room, :instructor, :capacity, :schedule, :class_type)');
-            $stmt->execute([':subject' => $data['subjectId'], ':room' => $roomId, ':instructor' => $instructorId, ':capacity' => $data['maxCapacity'] ?? 0, ':schedule' => $scheduleId, ':class_type' => $classType]);
+            $stmt = $conn->prepare('INSERT INTO offering (subject_id, room_id, instructor_id, max_capacity, schedule_id, section_id, class_type) VALUES (:subject, :room, :instructor, :capacity, :schedule, :section, :class_type)');
+            $stmt->execute([':subject' => $data['subjectId'], ':room' => $roomId, ':instructor' => $instructorId, ':capacity' => $data['maxCapacity'] ?? 0, ':schedule' => $scheduleId, ':section' => $sectionId, ':class_type' => $classType]);
         }
         }
         $conn->commit();
@@ -525,26 +526,23 @@ try {
         }
 
         $conn->beginTransaction();
-        $scheduleStmt = $conn->prepare('SELECT schedule_id FROM schedule WHERE section_id = :section ORDER BY schedule_id LIMIT 1');
-        $scheduleStmt->execute([':section' => $sectionId]);
+        $scheduleStmt = $conn->prepare('SELECT sc.schedule_id FROM schedule sc JOIN section s ON s.section_id = sc.section_id WHERE sc.section_id = :section AND s.subject_id = :subject ORDER BY sc.schedule_id LIMIT 1');
+        $scheduleStmt->execute([':section' => $sectionId, ':subject' => $subjectId]);
         $scheduleId = $scheduleStmt->fetchColumn();
         if (!$scheduleId) {
             $conn->rollBack();
             respond(['success' => false, 'message' => 'The section has no schedule yet'], 400);
         }
 
-        $publishStmt = $conn->prepare('UPDATE admin_section_draft SET published = TRUE WHERE section_id = :section AND subject_id = :subject');
-        $publishStmt->execute([':section' => $sectionId, ':subject' => $subjectId]);
-
         $offeringStmt = $conn->prepare('SELECT offering_id FROM offering WHERE subject_id = :subject AND schedule_id = :schedule LIMIT 1');
         $offeringStmt->execute([':subject' => $subjectId, ':schedule' => $scheduleId]);
         $offeringId = $offeringStmt->fetchColumn();
         if ($offeringId) {
-            $updateStmt = $conn->prepare('UPDATE offering SET max_capacity = :capacity WHERE offering_id = :id');
-            $updateStmt->execute([':capacity' => $capacity, ':id' => $offeringId]);
+            $updateStmt = $conn->prepare('UPDATE offering SET max_capacity = :capacity, section_id = :section WHERE offering_id = :id');
+            $updateStmt->execute([':capacity' => $capacity, ':section' => $sectionId, ':id' => $offeringId]);
         } else {
-            $insertStmt = $conn->prepare('INSERT INTO offering (subject_id, max_capacity, schedule_id) VALUES (:subject, :capacity, :schedule) RETURNING offering_id');
-            $insertStmt->execute([':subject' => $subjectId, ':capacity' => $capacity, ':schedule' => $scheduleId]);
+            $insertStmt = $conn->prepare('INSERT INTO offering (subject_id, max_capacity, schedule_id, section_id) VALUES (:subject, :capacity, :schedule, :section) RETURNING offering_id');
+            $insertStmt->execute([':subject' => $subjectId, ':capacity' => $capacity, ':schedule' => $scheduleId, ':section' => $sectionId]);
             $offeringId = $insertStmt->fetchColumn();
         }
         $conn->commit();
