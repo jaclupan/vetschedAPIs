@@ -59,6 +59,24 @@ function requestData() {
     return is_array($body) ? $body : [];
 }
 
+function lockUniqueName(PDO $conn, string $namespace, string $name, ?int $parentId = null): void {
+    if ($parentId === null) {
+        $stmt = $conn->prepare("SELECT pg_advisory_xact_lock(hashtext(:namespace || LOWER(TRIM(:name))))");
+        $stmt->execute([':namespace' => $namespace, ':name' => $name]);
+        return;
+    }
+
+    $stmt = $conn->prepare("SELECT pg_advisory_xact_lock(hashtext(:namespace || CAST(:parent_id AS TEXT) || ':' || LOWER(TRIM(:name))))");
+    $stmt->execute([':namespace' => $namespace, ':parent_id' => $parentId, ':name' => $name]);
+}
+
+function rejectDuplicateName(PDO $conn, string $message): void {
+    if ($conn->inTransaction()) {
+        $conn->rollBack();
+    }
+    respond(['success' => false, 'message' => $message], 409);
+}
+
 function requireSuperAdmin(PDO $conn, array $data): array {
     $username = trim((string) ($data['actorUsername'] ?? ''));
     $password = (string) ($data['actorPassword'] ?? '');
@@ -437,15 +455,33 @@ try {
         if (strlen($code) > 10) {
             respond(['success' => false, 'message' => 'Subject code must be 10 characters or fewer'], 400);
         }
-        if (!empty($data['id']) && is_numeric($data['id'])) {
+        $subjectId = !empty($data['id']) && is_numeric($data['id']) ? (int) $data['id'] : null;
+        $conn->beginTransaction();
+        lockUniqueName($conn, 'subject-name:', $name);
+        $duplicateSql = 'SELECT 1 FROM subject WHERE LOWER(TRIM(subject_name)) = LOWER(TRIM(:name))';
+        if ($subjectId !== null) {
+            $duplicateSql .= ' AND subject_id <> :id';
+        }
+        $duplicateStmt = $conn->prepare($duplicateSql . ' LIMIT 1');
+        $duplicateParams = [':name' => $name];
+        if ($subjectId !== null) {
+            $duplicateParams[':id'] = $subjectId;
+        }
+        $duplicateStmt->execute($duplicateParams);
+        if ($duplicateStmt->fetchColumn()) {
+            rejectDuplicateName($conn, 'A subject with this name already exists');
+        }
+
+        if ($subjectId !== null) {
             $stmt = $conn->prepare('UPDATE subject SET subject_code = :code, subject_name = :name, year_level = :year_level, semester = :semester WHERE subject_id = :id');
-            $stmt->execute([':id' => $data['id'], ':code' => $code, ':name' => $name, ':year_level' => $yearLevel, ':semester' => $semester]);
-            $id = (int) $data['id'];
+            $stmt->execute([':id' => $subjectId, ':code' => $code, ':name' => $name, ':year_level' => $yearLevel, ':semester' => $semester]);
+            $id = $subjectId;
         } else {
             $stmt = $conn->prepare('INSERT INTO subject (subject_code, subject_name, year_level, semester) VALUES (:code, :name, :year_level, :semester) RETURNING subject_id');
             $stmt->execute([':code' => $code, ':name' => $name, ':year_level' => $yearLevel, ':semester' => $semester]);
             $id = (int) $stmt->fetchColumn();
         }
+        $conn->commit();
         respond(['success' => true, 'id' => $id, 'code' => $code, 'name' => $name, 'yearLevel' => $yearLevel, 'semester' => $semester]);
     }
 
@@ -490,24 +526,34 @@ try {
         }
 
         $conn->beginTransaction();
+        lockUniqueName($conn, 'section-name:', $sectionName, (int) $subjectId);
+        $duplicateSql = 'SELECT 1 FROM section WHERE subject_id = :subject AND LOWER(TRIM(section_name)) = LOWER(TRIM(:name))';
+        if (!empty($data['id']) && is_numeric($data['id'])) {
+            $duplicateSql .= ' AND section_id <> :id';
+        }
+        $duplicateStmt = $conn->prepare($duplicateSql . ' LIMIT 1');
+        $duplicateParams = [':subject' => (int) $subjectId, ':name' => $sectionName];
+        if (!empty($data['id']) && is_numeric($data['id'])) {
+            $duplicateParams[':id'] = (int) $data['id'];
+        }
+        $duplicateStmt->execute($duplicateParams);
+        if ($duplicateStmt->fetchColumn()) {
+            rejectDuplicateName($conn, 'A section with this name already exists for this subject');
+        }
+
         $sectionId = null;
         if (!empty($data['id']) && is_numeric($data['id'])) {
             $sectionId = (int) $data['id'];
             $stmt = $conn->prepare('UPDATE section SET section_name = :name, subject_id = :subject, max_capacity = :capacity WHERE section_id = :id');
             $stmt->execute([':id' => $sectionId, ':name' => $sectionName, ':subject' => $subjectId, ':capacity' => $capacity]);
         } else {
-            $stmt = $conn->prepare('SELECT section_id FROM section WHERE subject_id = :subject AND LOWER(TRIM(section_name)) = LOWER(TRIM(:name)) LIMIT 1');
-            $stmt->execute([':subject' => $subjectId, ':name' => $sectionName]);
+            $stmt = $conn->prepare('INSERT INTO section (section_name, subject_id, max_capacity, is_open) VALUES (:name, :subject, :capacity, :is_open) RETURNING section_id');
+            $stmt->bindValue(':name', $sectionName);
+            $stmt->bindValue(':subject', (int) $subjectId, PDO::PARAM_INT);
+            $stmt->bindValue(':capacity', $capacity, PDO::PARAM_INT);
+            $stmt->bindValue(':is_open', (bool) ($data['isOpen'] ?? false), PDO::PARAM_BOOL);
+            $stmt->execute();
             $sectionId = (int) $stmt->fetchColumn();
-            if (!$sectionId) {
-                $stmt = $conn->prepare('INSERT INTO section (section_name, subject_id, max_capacity, is_open) VALUES (:name, :subject, :capacity, :is_open) RETURNING section_id');
-                $stmt->bindValue(':name', $sectionName);
-                $stmt->bindValue(':subject', (int) $subjectId, PDO::PARAM_INT);
-                $stmt->bindValue(':capacity', $capacity, PDO::PARAM_INT);
-                $stmt->bindValue(':is_open', (bool) ($data['isOpen'] ?? false), PDO::PARAM_BOOL);
-                $stmt->execute();
-                $sectionId = (int) $stmt->fetchColumn();
-            }
         }
 
         $stmt = $conn->prepare('DELETE FROM offering WHERE offering_id IN (SELECT o.offering_id FROM offering o JOIN schedule sc ON sc.schedule_id = o.schedule_id WHERE sc.section_id = :section_schedule) OR section_id = :section_direct');
@@ -588,6 +634,21 @@ try {
         }
         $conn->beginTransaction();
 
+        lockUniqueName($conn, 'section-name:', (string) $data['type'], (int) $data['subjectId']);
+        $duplicateSql = 'SELECT 1 FROM section WHERE subject_id = :subject AND LOWER(TRIM(section_name)) = LOWER(TRIM(:name))';
+        if (!empty($data['id']) && is_numeric($data['id'])) {
+            $duplicateSql .= ' AND section_id <> :id';
+        }
+        $duplicateStmt = $conn->prepare($duplicateSql . ' LIMIT 1');
+        $duplicateParams = [':subject' => (int) $data['subjectId'], ':name' => (string) $data['type']];
+        if (!empty($data['id']) && is_numeric($data['id'])) {
+            $duplicateParams[':id'] = (int) $data['id'];
+        }
+        $duplicateStmt->execute($duplicateParams);
+        if ($duplicateStmt->fetchColumn()) {
+            rejectDuplicateName($conn, 'A section with this name already exists for this subject');
+        }
+
         if (!empty($data['id']) && is_numeric($data['id'])) {
             $sectionId = (int) $data['id'];
             $stmt = $conn->prepare('UPDATE section SET section_name = :name, subject_id = :subject WHERE section_id = :id');
@@ -599,14 +660,9 @@ try {
             $stmt = $conn->prepare('DELETE FROM schedule sc WHERE sc.section_id = :section AND NOT EXISTS (SELECT 1 FROM offering o WHERE o.schedule_id = sc.schedule_id)');
             $stmt->execute([':section' => $sectionId]);
         } else {
-            $stmt = $conn->prepare('SELECT section_id FROM section WHERE subject_id = :subject AND LOWER(TRIM(section_name)) = LOWER(TRIM(:name)) ORDER BY section_id LIMIT 1');
-            $stmt->execute([':subject' => $data['subjectId'], ':name' => $data['type']]);
+            $stmt = $conn->prepare('INSERT INTO section (section_name, subject_id) VALUES (:name, :subject) RETURNING section_id');
+            $stmt->execute([':name' => $data['type'], ':subject' => $data['subjectId']]);
             $sectionId = (int) $stmt->fetchColumn();
-            if (!$sectionId) {
-                $stmt = $conn->prepare('INSERT INTO section (section_name, subject_id) VALUES (:name, :subject) RETURNING section_id');
-                $stmt->execute([':name' => $data['type'], ':subject' => $data['subjectId']]);
-                $sectionId = (int) $stmt->fetchColumn();
-            }
         }
 
         $instructorId = getOrCreateInstructorId($conn, $data['instructor']);

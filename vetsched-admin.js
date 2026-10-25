@@ -31,6 +31,18 @@ async function saveList(key,list){
 		return null;
 	}
 }
+async function runSaveOnce(buttonId, action){
+	const button=document.getElementById(buttonId);
+	if(button.disabled)return;
+	button.disabled=true;
+	button.setAttribute('aria-busy','true');
+	try{
+		await action();
+	}finally{
+		button.disabled=false;
+		button.removeAttribute('aria-busy');
+	}
+}
 async function deleteRecord(key,id){
 	try{
 		const response=await fetch(`${API_URL}?resource=${encodeURIComponent(key)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete',id})});
@@ -794,11 +806,11 @@ document.getElementById('removeClassInstructor').addEventListener('click',event=
 document.getElementById('cancelRemoveInstructor').addEventListener('click',cancelInstructorRemoval);
 document.getElementById('confirmRemoveInstructor').addEventListener('click',confirmInstructorRemoval);
 document.getElementById('removeInstructorOverlay').addEventListener('click',event=>{if(event.target===event.currentTarget)cancelInstructorRemoval();});
-document.getElementById('cancelClass').addEventListener('click',closeClassModal);document.getElementById('saveClass').addEventListener('click',saveClass);
+document.getElementById('cancelClass').addEventListener('click',closeClassModal);document.getElementById('saveClass').addEventListener('click',()=>runSaveOnce('saveClass',saveClass));
 const classCardObserver=new MutationObserver(()=>{document.querySelectorAll('.section-card').forEach(card=>{if(card.querySelector('.add-class-btn'))return;const button=document.createElement('button');button.className='icon-btn add-class-btn';button.textContent='Add class';button.title='Add class';button.addEventListener('click',()=>openAddClassModal(card.dataset.id));const actions=card.querySelector('.section-actions');if(actions)actions.appendChild(button);});});classCardObserver.observe(document.getElementById('mainInner'),{childList:true,subtree:true});
 const classListObserver=new MutationObserver(()=>{document.querySelectorAll('.section-card').forEach(card=>{if(card.querySelector('.section-class-list'))return;const section=sections.find(item=>String(item.id)===String(card.dataset.id));if(!section)return;const summary=card.querySelector('.section-sub');if(summary)summary.style.display='none';const remaining=document.createElement('div');remaining.className='section-remaining';remaining.textContent=`Remaining slots: ${section.remainingSeats ?? Math.max(Number(section.maxCapacity||0)-Number(section.enrollmentCount||0),0)}/${section.maxCapacity||0}`;const list=document.createElement('div');list.className='section-class-list';const classes=section.classes||[];list.innerHTML=classes.length?classes.map((item,index)=>`<div class="section-class-row"><strong>${escapeHtml(item.classType||'Lecture')}</strong><span>${formatDays(item.days).join(', ')} ${fmtTime(item.start)} - ${fmtTime(item.end)}</span><span>${escapeHtml(item.instructor||'')}</span><span>${escapeHtml(item.room||'No room')}</span><button type="button" class="edit-class-btn" data-class-index="${index}">Edit class</button><button type="button" class="delete-class-btn" data-class-index="${index}">Delete class</button></div>`).join(''):'<div class="section-empty-class">If empty, add a class.</div>';list.querySelectorAll('.edit-class-btn').forEach(button=>button.addEventListener('click',()=>openEditClassModal(section.id,Number(button.dataset.classIndex))));list.querySelectorAll('.delete-class-btn').forEach(button=>button.addEventListener('click',()=>deleteClass(section.id,Number(button.dataset.classIndex))));const titleRow=card.querySelector('.section-title-row');if(titleRow)titleRow.after(remaining);if(summary)summary.after(list);else card.querySelector('.section-main')?.append(list);});});classListObserver.observe(document.getElementById('mainInner'),{childList:true,subtree:true});
 document.getElementById('hamburgerBtn').addEventListener('click',e=>{e.stopPropagation();toggleNavMenu();});document.getElementById('navSubjects').addEventListener('click',()=>switchView('subjects'));document.getElementById('navStudents').addEventListener('click',()=>switchView('students'));document.addEventListener('click',e=>{const menu=document.getElementById('navMenu');if(menu.classList.contains('open')&&!menu.contains(e.target)&&e.target.id!=='hamburgerBtn')toggleNavMenu(false);});
-document.getElementById('cancelSubject').addEventListener('click',closeSubjectModal);document.getElementById('saveSubject').addEventListener('click',saveSubject);document.getElementById('cancelSection').addEventListener('click',closeSectionModal);document.getElementById('saveSection').addEventListener('click',saveSection);document.querySelectorAll('.day-toggle').forEach(btn=>btn.addEventListener('click',()=>{const day=btn.dataset.day;selectedDays=selectedDays.includes(day)?selectedDays.filter(item=>item!==day):[...selectedDays,day];setDayPickerUI();}));document.getElementById('cancelStudent').addEventListener('click',closeStudentModal);document.getElementById('saveStudent').addEventListener('click',saveStudent);document.addEventListener('keydown',e=>{if(e.key==='Escape'){toggleNavMenu(false);if(document.getElementById('removeInstructorOverlay').classList.contains('open'))cancelInstructorRemoval();}});
+document.getElementById('cancelSubject').addEventListener('click',closeSubjectModal);document.getElementById('saveSubject').addEventListener('click',()=>runSaveOnce('saveSubject',saveSubject));document.getElementById('cancelSection').addEventListener('click',closeSectionModal);document.getElementById('saveSection').addEventListener('click',()=>runSaveOnce('saveSection',saveSection));document.querySelectorAll('.day-toggle').forEach(btn=>btn.addEventListener('click',()=>{const day=btn.dataset.day;selectedDays=selectedDays.includes(day)?selectedDays.filter(item=>item!==day):[...selectedDays,day];setDayPickerUI();}));document.getElementById('cancelStudent').addEventListener('click',closeStudentModal);document.getElementById('saveStudent').addEventListener('click',saveStudent);document.addEventListener('keydown',e=>{if(e.key==='Escape'){toggleNavMenu(false);if(document.getElementById('removeInstructorOverlay').classList.contains('open'))cancelInstructorRemoval();}});
 document.getElementById('navSettings').addEventListener('click',()=>switchView('settings'));
 let isRefreshing=false;
 let lastDatabaseSnapshot='';
