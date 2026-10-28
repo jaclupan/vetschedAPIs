@@ -59,6 +59,34 @@ function requestData() {
     return is_array($body) ? $body : [];
 }
 
+function timeToMinutes(string $value): ?int {
+    if (!preg_match('/^(\d{1,2}):(\d{2})(?::\d{2})?$/', trim($value), $matches)) {
+        return null;
+    }
+
+    $hours = (int) $matches[1];
+    $minutes = (int) $matches[2];
+    if ($hours < 0 || $hours > 23 || $minutes < 0 || $minutes > 59) {
+        return null;
+    }
+
+    return ($hours * 60) + $minutes;
+}
+
+function timesOverlap(string $firstStart, string $firstEnd, string $secondStart, string $secondEnd): bool {
+    $firstStartMinutes = timeToMinutes($firstStart);
+    $firstEndMinutes = timeToMinutes($firstEnd);
+    $secondStartMinutes = timeToMinutes($secondStart);
+    $secondEndMinutes = timeToMinutes($secondEnd);
+
+    return $firstStartMinutes !== null
+        && $firstEndMinutes !== null
+        && $secondStartMinutes !== null
+        && $secondEndMinutes !== null
+        && $firstStartMinutes < $secondEndMinutes
+        && $secondStartMinutes < $firstEndMinutes;
+}
+
 function lockUniqueName(PDO $conn, string $namespace, string $name, ?int $parentId = null): void {
     if ($parentId === null) {
         $stmt = $conn->prepare("SELECT pg_advisory_xact_lock(hashtext(:namespace || LOWER(TRIM(:name))))");
@@ -519,7 +547,7 @@ try {
                 $otherStart = (string) ($otherClass['start'] ?? '');
                 $otherEnd = (string) ($otherClass['end'] ?? '');
                 $sameDay = array_intersect($classDays, $otherDays);
-                if ($sameDay && $classStart < $otherEnd && $otherStart < $classEnd) {
+                if ($sameDay && timesOverlap($classStart, $classEnd, $otherStart, $otherEnd)) {
                     respond(['success' => false, 'message' => 'Schedule conflict: two classes in this section overlap on ' . implode(', ', $sameDay)], 409);
                 }
             }
@@ -570,7 +598,9 @@ try {
             $start = trim((string) ($class['start'] ?? ''));
             $end = trim((string) ($class['end'] ?? ''));
             $instructor = trim((string) ($class['instructor'] ?? ''));
-            if (!in_array($classType, ['Lecture', 'Lab'], true) || !$days || $start === '' || $end === '' || $start >= $end || $instructor === '') {
+            $startMinutes = timeToMinutes($start);
+            $endMinutes = timeToMinutes($end);
+            if (!in_array($classType, ['Lecture', 'Lab'], true) || !$days || $startMinutes === null || $endMinutes === null || $startMinutes >= $endMinutes || $instructor === '') {
                 $conn->rollBack();
                 respond(['success' => false, 'message' => 'Each class slot needs a valid type, day, time, and instructor'], 400);
             }
